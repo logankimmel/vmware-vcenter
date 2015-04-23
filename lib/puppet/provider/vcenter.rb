@@ -110,26 +110,29 @@ class Puppet::Provider::Vcenter <  Puppet::Provider
   end
 
   def host(host=nil, path=nil, fail_if_not_found = true)
-    @host ||= begin
-      if resource.propertydefined?(:host)
-        host = resource[:host]
-      end
-      if resource.propertydefined?(:path)
-        path ||= resource[:path]
+    if @host != null
+      @transport = nil if @host.runtime.connectionState != "connected"
+      begin
+        if resource.propertydefined?(:host)
+          host = resource[:host]
+        end
+        if resource.propertydefined?(:path)
+          path ||= resource[:path]
+        end
+
+        if path
+          dc = walk(path, RbVmomi::VIM::Datacenter) or fail("No datacenter in path: #{path}")
+          vim.searchIndex.FindByDnsName(:datacenter => dc, :dnsName => host, :vmSearch => false)
+        elsif host =~ Resolv::IPv4::Regex
+          vim.searchIndex.FindByIp(:ip => host, :vmSearch => false)
+        else
+          vim.searchIndex.FindByDnsName(:dnsName => host, :vmSearch => false)
+        end
       end
 
-      if path
-        dc = walk(path, RbVmomi::VIM::Datacenter) or fail("No datacenter in path: #{path}")
-        vim.searchIndex.FindByDnsName(:datacenter => dc, :dnsName => host, :vmSearch => false)
-      elsif host =~ Resolv::IPv4::Regex
-        vim.searchIndex.FindByIp(:ip => host, :vmSearch => false)
-      else
-        vim.searchIndex.FindByDnsName(:dnsName => host, :vmSearch => false)
+      if fail_if_not_found && !@host
+        fail('An invalid host name or IP address is entered. Enter the correct host name and IP address.')
       end
-    end
-
-    if fail_if_not_found && !@host
-      fail('An invalid host name or IP address is entered. Enter the correct host name and IP address.')
     end
     @host
   end
